@@ -1,4 +1,4 @@
-# 🪙 Prototipo de Monitoreo y Visualización de Criptomonedas en Tiempo Real
+# Prototipo de Monitoreo y Visualización de Criptomonedas en Tiempo Real
 **Autor:** Víctor De la Torre  
 *Desarrollo de un prototipo de visualización de datos utilizando Docker, API y bases de datos.*
 
@@ -38,12 +38,13 @@ El sistema se orquesta mediante **Docker Compose**, aislando las responsabilidad
 
 ```mermaid
 flowchart TD
-    API["🌐 CoinGecko API"] -->|"HTTP GET (cada 30 s)"| INGESTA["Contenedor Ingesta\n(Python Daemon Worker)"]
+    API[" CoinGecko API"] -->|"HTTP GET (cada 30 s)"| INGESTA["Contenedor Ingesta\n(Python Daemon Worker)"]
     INGESTA -->|"Inserción SQL (cada 30 s)"| MYSQL[("Contenedor Base de Datos\n(MySQL 8.4)")]
-    MYSQL <-->|"Persistencia física"| VOLUMEN[("💾 Volumen de datos\n(mysql_data)")]
+    MYSQL <-->|"Persistencia física"| VOLUMEN[("Volumen de datos\n(mysql_data)")]
     MYSQL -->|"Consulta SELECT (cada 10 s)"| DASH["Contenedor Visualización\n(Gunicorn + Dash)"]
-    DASH -->|"Puerto 8050"| WEB["💻 Navegador Web"]
+    DASH -->|"Puerto 8050"| WEB["Navegador Web"]
 ```
+
 
 ### Detalle de los microservicios
 
@@ -134,12 +135,4 @@ docker compose exec mysql mysql -u dash_user -p agricultura
 docker compose down
 ```
 
-```mermaid
-flowchart TD
-    API["🌐 CoinGecko API"] -->|"HTTP GET (cada 30 s)"| INGESTA["Contenedor Ingesta\n(Python Daemon Worker)"]
-    INGESTA -->|"Inserción SQL (cada 30 s)"| MYSQL[("Contenedor Base de Datos\n(MySQL 8.4)")]
-    MYSQL <-->|"Persistencia física"| VOLUMEN[("💾 Volumen de datos\n(mysql_data)")]
-    MYSQL -->|"Consulta SELECT (cada 10 s)"| DASH["Contenedor Visualización\n(Gunicorn + Dash)"]
-    DASH -->|"Puerto 8050"| WEB["💻 Navegador Web"]
-```
 
