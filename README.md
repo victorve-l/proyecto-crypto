@@ -1,55 +1,145 @@
+# 🪙 Prototipo de Monitoreo y Visualización de Criptomonedas en Tiempo Real
+**Autor:** Víctor De la Torre  
+*Desarrollo de un prototipo de visualización de datos utilizando Docker, API y bases de datos.*
+
+---
+
+## 1. Problemática o necesidad que busca atender el proyecto
+
+Las criptomonedas son activos digitales que permiten realizar transacciones directamente a través de una plataforma en línea, empleando mecanismos criptográficos para garantizar la seguridad de las operaciones, regular la emisión de nuevas unidades y validar transferencias de forma descentralizada.
+
+Debido a su alta volatilidad y a que sus precios fluctúan continuamente en los mercados internacionales, resulta fundamental contar con mecanismos automatizados de monitoreo y registro histórico. En este proyecto se desarrolló un **pipeline desacoplado en microservicios contenerizados con Docker** que extrae cotizaciones de mercado en tiempo real de distintos criptoactivos, las persiste en una base de datos relacional y las presenta en una interfaz analítica interactiva para apoyar la toma de decisiones.
+
+---
+
+## 2. API seleccionada y datos extraídos
+
+Se utilizó la API pública de **[CoinGecko](https://docs.coingecko.com/)** para extraer cotizaciones de tres activos principales:
+* **Bitcoin (BTC)**
+* **Ethereum (ETH)**
+* **Solana (SOL)**
+
+### Consulta HTTP
+Se realizan peticiones `HTTP GET` periódicas al siguiente endpoint:
+```text
+[https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true](https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true)
+```
+
+### Métricas recolectadas
+* **`usd`**: Precio spot o valor actual del activo en dólares estadounidenses.
+* **`usd_24h_vol`**: Volumen total negociado en USD en las últimas 24 horas continuas.
+* **`usd_24h_change`**: Variación porcentual del precio respecto a las últimas 24 horas.
+
+---
+
+## 3. Arquitectura de la solución y función de cada contenedor
+
+El sistema se orquesta mediante **Docker Compose**, aislando las responsabilidades en tres contenedores independientes interconectados a través de una red privada virtual:
+
 ```mermaid
 flowchart TD
-    %% Estilos
-    classDef external fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
-    classDef container fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c;
-    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
-    classDef client fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
-
-    %% Nodos externos
-    API["🌐 API Publica CoinGecko (/simple/price)"]:::external
-    USER["💻 Navegador Web (localhost:8050)"]:::client
-
-    %% Red Docker
-    subgraph DOCKER_NET ["🐳 Red Privada Docker: proyecto-crypto_default"]
-        
-        subgraph S_INGESTA ["Contenedor Ingesta (Worker Daemon)"]
-            I_WORKER["🐍 ingesta.py (Polling cada 30s)"]:::container
-            I_RETRY{"¿HTTP 200 OK?"}:::container
-            I_ERR["⚠️ Captura de excepcion (Tolerancia a fallos)"]:::container
-        end
-
-        subgraph S_MYSQL ["Contenedor MySQL 8.4 (DBMS)"]
-            DB_HEALTH["🩺 Healthcheck activo (SELECT 1)"]:::storage
-            DB_ENGINE[("🗄️ Base de Datos: agricultura - Tabla: precios_crypto")]:::storage
-        end
-
-        subgraph S_DASH ["Contenedor Dash (Web Server)"]
-            D_GUNICORN["🚀 Servidor Gunicorn (2 Workers WSGI)"]:::container
-            D_APP["📊 app.py (Dash y Plotly en vivo)"]:::container
-        end
-
-    end
-
-    %% Persistencia
-    VOLUME[("💾 Volumen Persistente: mysql_data")]:::storage
-
-    %% Flujos de Ingesta
-    API -->|"GET BTC, ETH, SOL (JSON)"| I_WORKER
-    I_WORKER --> I_RETRY
-    I_RETRY -->|"No: Error o Timeout"| I_ERR
-    I_ERR -.->|"Espera siguiente ciclo"| I_WORKER
-    I_RETRY -->|"Si: INSERT SQL y commit()"| DB_ENGINE
-
-    %% Orquestacion y Dependencias
-    DB_HEALTH -->|"service_healthy"| I_WORKER
-    DB_HEALTH -->|"service_healthy"| D_GUNICORN
-
-    %% Flujos de Base de Datos y Persistencia
-    DB_ENGINE <-->|"Escribe y Lee datos fisicos"| VOLUME
-
-    %% Flujos de Visualizacion
-    D_GUNICORN --> D_APP
-    DB_ENGINE -->|"SELECT ultimas 500 filas"| D_APP
-    D_APP -->|"Renderiza grafica interactiva"| USER
+    API["🌐 CoinGecko API"] -->|"HTTP GET (cada 30 s)"| INGESTA["Contenedor Ingesta\n(Python Daemon Worker)"]
+    INGESTA -->|"Inserción SQL (cada 30 s)"| MYSQL[("Contenedor Base de Datos\n(MySQL 8.4)")]
+    MYSQL <-->|"Persistencia física"| VOLUMEN[("💾 Volumen de datos\n(mysql_data)")]
+    MYSQL -->|"Consulta SELECT (cada 10 s)"| DASH["Contenedor Visualización\n(Gunicorn + Dash)"]
+    DASH -->|"Puerto 8050"| WEB["💻 Navegador Web"]
 ```
+
+### Detalle de los microservicios
+
+* **Contenedor Ingesta (`proyecto-crypto-ingesta-1`):**  
+  Construido a partir de una imagen ligera (`python:3.12-slim`). Ejecuta en segundo plano el script `ingesta.py`. Cada 30 segundos consulta la API de CoinGecko, procesa la respuesta JSON y ejecuta sentencias `INSERT` parametrizadas en MySQL con manejo de excepciones para tolerar interrupciones de red.
+
+* **Contenedor Base de Datos (`proyecto-crypto-mysql-1`):**  
+  Ejecuta la imagen oficial `mysql:8.4`. Al iniciar por primera vez ejecuta el script de inicialización `01-init.sql` para crear la base de datos `agricultura` y la tabla `precios_crypto`. Emplea un volumen persistente de Docker (`mysql_data`) para conservar los registros históricos aunque los contenedores se detengan o reinicien.
+
+* **Contenedor Visualización (`proyecto-crypto-dash-1`):**  
+  Sirve la aplicación analítica construida con Dash/Plotly mediante el servidor WSGI **Gunicorn** sobre el puerto `8050`. Consulta la base de datos MySQL periódicamente (polling reactivo cada 10 segundos) y redibuja la curva temporal de precios según el activo seleccionado en la interfaz.
+
+---
+
+## 4. Diseño de la base de datos
+
+* **Motor DBMS:** MySQL 8.4 Server  
+* **Base de datos:** `agricultura`  
+* **Tabla:** `precios_crypto`  
+
+### Diccionario de datos
+
+| Campo | Tipo de Dato | Modificadores | Descripción |
+| :--- | :--- | :--- | :--- |
+| **`id`** | `INT` | `PRIMARY KEY, AUTO_INCREMENT` | Identificador único y secuencial de cada registro |
+| **`fecha`** | `DATETIME` | `NOT NULL` | Marca de tiempo precisa de la captura (`AAAA-MM-DD HH:MM:SS`) |
+| **`criptomoneda`** | `VARCHAR(50)` | `NOT NULL` | Nombre del criptoactivo (`bitcoin`, `ethereum`, `solana`) |
+| **`precio_usd`** | `DECIMAL(16,4)` | `NOT NULL` | Cotización spot del activo en dólares |
+| **`volumen_24h`** | `DOUBLE` | `DEFAULT NULL` | Monto acumulado en USD operado en las últimas 24 horas |
+| **`cambio_24h`** | `FLOAT` | `DEFAULT NULL` | Variación porcentual del precio frente a las 24 horas previas |
+
+---
+
+## 5. Demostración del prototipo y comandos de verificación
+
+A continuación se detallan los pasos para auditar el ciclo completo de los datos (**obtención**, **almacenamiento** y **visualización**):
+
+### 1. Verificar estado de los contenedores
+```powershell
+docker compose ps
+```
+Comprueba que los tres servicios (`dash`, `ingesta` y `mysql`) se encuentren en estado de ejecución (`Up` y `healthy`).
+
+### 2. Verificar la obtención de datos en tiempo real
+```powershell
+docker compose logs ingesta --tail 10
+```
+Muestra las últimas transacciones realizadas por el worker hacia la API externa y su confirmación de escritura.
+
+### 3. Verificar el almacenamiento físico en MySQL
+```powershell
+docker compose exec mysql mysql -u dash_user -p agricultura
+```
+*Contraseña:* `DashDemo2026_local`
+
+Dentro del prompt interactivo de MySQL:
+```sql
+SELECT id, fecha, criptomoneda, precio_usd FROM precios_crypto ORDER BY id DESC LIMIT 3;
+```
+Permite auditar las últimas filas guardadas en disco. Para salir: `exit;`.
+
+### 4. Visualización en el navegador web
+Acceder desde cualquier navegador local a:  
+👉 **`http://localhost:8050`**
+
+* Menú desplegable para alternar dinámicamente entre Bitcoin, Ethereum y Solana.
+* Gráfica reactiva construida en Plotly que actualiza sus series temporales automáticamente sin recargar la página.
+
+---
+
+## 6. Ciclo de ejecución rápida (Script de demostración)
+
+```powershell
+# Levantar el entorno completo en segundo plano
+docker compose up -d
+
+# Validar contenedores activos
+docker compose ps
+
+# Inspeccionar logs de recolección
+docker compose logs ingesta --tail 10
+
+# Consultar directamente la base de datos
+docker compose exec mysql mysql -u dash_user -p agricultura
+# (Ingresar contraseña: DashDemo2026_local y correr query SELECT)
+
+# Apagar y desmontar los servicios conservando los datos
+docker compose down
+```
+
+```mermaid
+flowchart TD
+    API["🌐 CoinGecko API"] -->|"HTTP GET (cada 30 s)"| INGESTA["Contenedor Ingesta\n(Python Daemon Worker)"]
+    INGESTA -->|"Inserción SQL (cada 30 s)"| MYSQL[("Contenedor Base de Datos\n(MySQL 8.4)")]
+    MYSQL <-->|"Persistencia física"| VOLUMEN[("💾 Volumen de datos\n(mysql_data)")]
+    MYSQL -->|"Consulta SELECT (cada 10 s)"| DASH["Contenedor Visualización\n(Gunicorn + Dash)"]
+    DASH -->|"Puerto 8050"| WEB["💻 Navegador Web"]
+```
+
