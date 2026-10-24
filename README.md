@@ -108,7 +108,7 @@ Permite auditar las últimas filas guardadas en disco. Para salir: `exit;`.
 
 ### 4. Visualización en el navegador web
 Acceder desde cualquier navegador local a:  
-👉 **`http://localhost:8050`**
+**`http://localhost:8050`**
 
 * Menú desplegable para alternar dinámicamente entre Bitcoin, Ethereum y Solana.
 * Gráfica reactiva construida en Plotly que actualiza sus series temporales automáticamente sin recargar la página.
@@ -135,4 +135,79 @@ docker compose exec mysql mysql -u dash_user -p agricultura
 docker compose down
 ```
 
+## Cómo ejecutar el proyecto localmente
 
+Sigue estos pasos para clonar y levantar el pipeline completo en tu máquina local.
+
+### Prerrequisitos
+Solo necesitas tener instaladas las siguientes herramientas:
+* [Git](https://git-scm.com/) (o GitHub Desktop)
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/) (con Docker Compose activo)
+
+> **Nota:** No es necesario tener instalados localmente Python ni MySQL, ya que todos los servicios y sus dependencias se ejecutan dentro de los contenedores aislados de Docker.
+
+---
+
+### Pasos de instalación y despliegue
+
+#### 1. Clonar el repositorio
+Abre una terminal y clona el proyecto en tu computadora:
+```bash
+git clone [https://github.com/tu-usuario/proyecto-crypto.git](https://github.com/tu-usuario/proyecto-crypto.git)
+cd proyecto-crypto
+```
+
+#### 2. Configurar las variables de entorno
+El proyecto incluye un archivo de plantilla `.env.example` con las credenciales de demostración local. Debes generar tu archivo `.env` a partir de esta plantilla:
+
+* **En Windows (PowerShell):**
+  ```powershell
+  Copy-Item .env.example .env
+  ```
+* **En Linux / macOS:**
+  ```bash
+  cp .env.example .env
+  ```
+
+*(Opcionalmente, puedes editar el archivo `.env` resultante si deseas personalizar las contraseñas).*
+
+#### 3. Levantar los servicios con Docker Compose
+Asegúrate de que **Docker Desktop** esté abierto y ejecutándose en segundo plano. Luego, en la raíz del proyecto, corre:
+```bash
+docker compose up -d --build
+```
+Este comando:
+1. Compila la imagen ligera de Python e instala las dependencias (`requirements.txt`).
+2. Descarga la imagen oficial de MySQL 8.4 y ejecuta automáticamente el script de inicialización (`01-init.sql`).
+3. Monta el volumen de persistencia física (`mysql_data`).
+4. Enciende los tres contenedores (`mysql`, `ingesta` y `dash`) en segundo plano.
+
+#### 4. Acceder al Dashboard
+Una vez levantados los servicios, abre tu navegador web e ingresa a:  
+👉 **`http://localhost:8050`**
+
+---
+
+### Comandos de gestión y verificación
+
+* **Comprobar el estado de los contenedores:**
+  ```bash
+  docker compose ps
+  ```
+* **Monitorear en vivo la ingesta desde la API (CoinGecko):**
+  ```bash
+  docker compose logs ingesta -f
+  ```
+* **Consultar los registros guardados en la base de datos:**
+  ```bash
+  docker compose exec mysql mysql -u dash_user -p agricultura
+  ```
+  *(Ingresa la contraseña definida en tu `.env`, por defecto: `DashDemo2026_local`)*.  
+  Luego ejecuta:
+  ```sql
+  SELECT id, fecha, criptomoneda, precio_usd FROM precios_crypto ORDER BY id DESC LIMIT 5;
+  ```
+* **Detener el sistema (conservando los datos históricos):**
+  ```bash
+  docker compose down
+  ```
