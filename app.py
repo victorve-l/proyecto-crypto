@@ -146,15 +146,20 @@ def update_graph(selected_crypto, n):
         conn = mysql.connector.connect(
             host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
+# 1. Traer los 500 registros MÁS RECIENTES (DESC)
         query = """
             SELECT fecha, precio_usd, volumen_24h, cambio_24h 
             FROM precios_crypto 
             WHERE criptomoneda = %s 
-            ORDER BY fecha ASC 
+            ORDER BY fecha DESC 
             LIMIT 500
         """
         df = pd.read_sql(query, conn, params=[selected_crypto])
         conn.close()
+
+        # 2. Reordenar de pasado a presente para que la gráfica avance hacia la derecha
+        if not df.empty:
+          df = df.sort_values("fecha").reset_index(drop=True)
     except Exception:
         df = pd.DataFrame()
 
