@@ -160,6 +160,11 @@ def update_graph(selected_crypto, n):
         # 2. Reordenar de pasado a presente para que la gráfica avance hacia la derecha
         if not df.empty:
           df = df.sort_values("fecha").reset_index(drop=True)
+
+          df["fecha"] = (pd.to_datetime(df["fecha"])
+                         .dt.tz_localize("UTC")
+                         .dt.tz_convert("America/Hermosillo")
+          )
     except Exception:
         df = pd.DataFrame()
 
