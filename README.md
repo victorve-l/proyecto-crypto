@@ -69,12 +69,14 @@ flowchart TD
 
 | Campo | Tipo de Dato | Modificadores | Descripción |
 | :--- | :--- | :--- | :--- |
-| **`id`** | `INT` | `PRIMARY KEY, AUTO_INCREMENT` | Identificador único y secuencial de cada registro |
-| **`fecha`** | `DATETIME` | `NOT NULL` | Marca de tiempo precisa de la captura (`AAAA-MM-DD HH:MM:SS`) |
-| **`criptomoneda`** | `VARCHAR(50)` | `NOT NULL` | Nombre del criptoactivo (`bitcoin`, `ethereum`, `solana`) |
-| **`precio_usd`** | `DECIMAL(16,4)` | `NOT NULL` | Cotización spot del activo en dólares |
-| **`volumen_24h`** | `DOUBLE` | `DEFAULT NULL` | Monto acumulado en USD operado en las últimas 24 horas |
-| **`cambio_24h`** | `FLOAT` | `DEFAULT NULL` | Variación porcentual del precio frente a las 24 horas previas |
+| **`id`** | `BIGINT UNSIGNED` | `PRIMARY KEY, AUTO_INCREMENT` | Identificador único y secuencial de cada registro |
+| **`fecha`** | `DATETIME` | `NOT NULL, INDEX idx_fecha` | Marca de tiempo precisa de la captura (`AAAA-MM-DD HH:MM:SS`) |
+| **`criptomoneda`** | `VARCHAR(50)` | `NOT NULL, INDEX idx_crypto` | Nombre del criptoactivo (`bitcoin`, `ethereum`, `solana`) |
+| **`precio_usd`** | `DOUBLE` | `NOT NULL` | Cotización spot del activo en dólares |
+| **`volumen_24h`** | `DOUBLE` | `NOT NULL` | Monto acumulado en USD operado en las últimas 24 horas |
+| **`cambio_24h`** | `DOUBLE` | `NOT NULL` | Variación porcentual del precio frente a las 24 horas previas |
+
+> El esquema completo está en [`mysql/01-init.sql`](mysql/01-init.sql). Si cambias la tabla, actualiza también esta sección.
 
 ---
 
